@@ -1,0 +1,34 @@
+.auth-page { display: grid; grid-template-columns: 1.02fr .98fr; min-height: 100svh; background: var(--paper); }
+.auth-image { min-height: 100%; background: linear-gradient(0deg, rgba(16,35,27,.25), rgba(16,35,27,.03)), url('https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1600&q=85') center/cover; }
+.auth-panel { position: relative; display: flex; flex-direction: column; min-height: 100svh; padding: 38px clamp(32px, 6vw, 86px); }
+.auth-wordmark { display: inline-flex; align-items: center; gap: 8px; width: fit-content; color: var(--ink); font-size: 20px; font-weight: 700; text-decoration: none; }
+.auth-wordmark .brand-mark { width: 27px; height: 27px; border-color: var(--forest); transform: rotate(-32deg); }
+.auth-wordmark > span:last-child { margin-left: -8px; color: var(--coral); }
+.auth-back { display: flex; align-items: center; gap: 8px; width: fit-content; margin-top: 65px; color: var(--muted); font-size: 11px; text-decoration: none; }
+.auth-back:hover, .other-login:hover { color: var(--coral); }
+.auth-content { width: min(420px, 100%); margin: auto; padding: 55px 0 70px; }
+.auth-content .eyebrow { margin-bottom: 22px; }
+.auth-content h1 { margin: 0; color: var(--ink); font: 400 53px/.99 var(--serif); }
+.auth-description { margin: 19px 0 27px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.google-sign-in { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 54px; padding: 0 17px; border: 1px solid #cfd5ca; color: var(--ink); background: #fffef8; font: 700 11px var(--sans); cursor: pointer; transition: border-color .2s, transform .2s; }
+.google-sign-in:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--forest); }
+.google-sign-in:disabled { cursor: not-allowed; opacity: .55; }
+.google-mark { display: grid; place-items: center; width: 23px; height: 23px; border: 1px solid #dadeda; border-radius: 50%; color: #4285f4; font: 700 13px Arial,sans-serif; }
+.auth-message { margin: 0 0 17px; padding: 12px 13px; border-left: 2px solid var(--coral); color: #7a483e; background: #f2e5df; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.auth-message code { font: 600 10px var(--sans); }
+.signed-in-note { margin: 14px 0 0; color: var(--muted); font-size: 10px; line-height: 1.7; }
+.signed-in-note button { padding: 0; border: 0; color: var(--forest); background: transparent; font: 700 10px var(--sans); text-decoration: underline; cursor: pointer; }
+.auth-security { display: flex; align-items: center; gap: 8px; margin: 18px 0 0; color: var(--muted); font-size: 10px; }
+.other-login { display: inline-flex; align-items: center; gap: 6px; margin-top: 24px; color: var(--forest); font-size: 10px; font-weight: 700; text-decoration: none; }
+.auth-footnote { position: absolute; right: 32px; bottom: 27px; left: 32px; margin: 0; color: #8a9488; font: 500 15px var(--hand); }
+.route-loading { display: grid; min-height: 100svh; place-items: center; color: var(--muted); background: var(--paper); font-size: 13px; }
+
+@media (max-width: 760px) {
+  .auth-page { grid-template-columns: 1fr; }
+  .auth-image { display: none; }
+  .auth-panel { min-height: 100svh; padding: 25px 27px; }
+  .auth-back { margin-top: 47px; }
+  .auth-content { padding: 45px 0 70px; }
+  .auth-content h1 { font-size: 46px; }
+  .auth-footnote { left: 27px; }
+}

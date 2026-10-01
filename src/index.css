@@ -1,0 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+
+:root {
+  --paper: #f4f2e9;
+  --ink: #1b3027;
+  --forest: #224b3c;
+  --pale-green: #e5e9de;
+  --lime: #d9ef67;
+  --coral: #c96f57;
+  --muted: #68756b;
+  --line: #d9ded3;
+  --white: #fffef8;
+  --sans: 'DM Sans', sans-serif;
+  --serif: 'DM Serif Display', Georgia, serif;
+  --hand: 'Caveat', cursive;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  scroll-behavior: smooth;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+::selection { color: var(--ink); background: var(--lime); }
+#root { min-height: 100svh; }
