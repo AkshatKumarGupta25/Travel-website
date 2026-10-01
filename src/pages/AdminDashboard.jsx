@@ -312,7 +312,7 @@ function getHeaders(section) {
   return {
     trips: ['Destination', 'Region', 'Duration', 'Price', 'Website'],
     bookings: ['Traveler', 'Destination', 'Travel date', 'Travelers', 'Status'],
-    travelers: ['Traveler', 'Email', 'Joined', 'Account', 'Role'],
+    travelers: ['UID', 'Traveler', 'Email', 'Joined', 'Account', 'Role'],
     messages: ['From', 'Subject', 'Message', 'Received', 'Status'],
     content: ['Title', 'Category', 'Updated', 'Visibility'],
   }[section]
@@ -326,7 +326,7 @@ function renderCells(section, record, updateStatus, updatePublished, updateRead)
     <td><strong>{record.travelerName || record.name || 'Traveler'}</strong><small>{record.email || '—'}</small></td><td>{record.destination || '—'}</td><td>{record.startDate || readableDate(record.createdAt)}</td><td>{record.travelers || 1}</td><td><select className="admin-status-select" aria-label={`Booking status for ${record.travelerName || record.email || 'traveler'}`} value={record.status || 'new'} onChange={(event) => updateStatus(event.target.value)}><option value="new">New</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></td>
   </>
   if (section === 'travelers') return <>
-    <td><strong>{record.displayName || 'Traveler'}</strong></td><td>{record.email || '—'}</td><td>{readableDate(record.createdAt || record.lastSeenAt)}</td><td><span className={`booking-status ${record.disabled ? 'status-cancelled' : 'status-confirmed'}`}>{record.disabled ? 'Disabled' : 'Active'}</span></td><td><span className={record.admin ? 'role-badge is-admin' : 'role-badge'}>{record.admin ? 'Admin' : 'Traveler'}</span></td>
+    <td><code className="admin-uid" title={record.uid || record.id}>{record.uid || record.id}</code></td><td><strong>{record.displayName || 'Traveler'}</strong></td><td>{record.email || '—'}</td><td>{readableDate(record.createdAt || record.lastSeenAt)}</td><td><span className={`booking-status ${record.disabled ? 'status-cancelled' : 'status-confirmed'}`}>{record.disabled ? 'Disabled' : 'Active'}</span></td><td><span className={record.admin ? 'role-badge is-admin' : 'role-badge'}>{record.admin ? 'Admin' : 'Traveler'}</span></td>
   </>
   if (section === 'messages') return <>
     <td><strong>{record.name || 'Traveler'}</strong><small>{record.email || '—'}</small></td><td>{record.subject || 'Trip inquiry'}</td><td className="admin-message-preview">{record.body || '—'}</td><td>{readableDate(record.createdAt)}</td><td><button className={`booking-status ${record.isRead ? 'status-confirmed' : 'status-new'}`} type="button" onClick={() => updateRead(!record.isRead)}>{record.isRead ? 'Read' : 'Unread'}</button></td>
