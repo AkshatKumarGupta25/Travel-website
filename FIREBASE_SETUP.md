@@ -8,6 +8,7 @@ The app uses Firebase Authentication for Google sign-in, Cloud Firestore for man
 2. In Authentication, enable Google as a sign-in provider and add `localhost` plus your production domain to Authorized domains.
 3. Create a Cloud Firestore database.
 4. Copy `.env.example` to `.env.local` and fill in the Web app values from Project settings. Restart the Vite dev server after changing environment variables.
+5. To use Google destination thumbnails for traveler-created trips, enable the Places API (New), create a browser API key restricted to your site’s HTTP referrers and Places API, and set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local`. Without it, the dashboard searches Wikimedia Commons for a matching destination image.
 
 ## 2. Deploy rules and functions
 
@@ -40,6 +41,7 @@ The script sets the `admin` and `role` custom claims. Have that user sign out an
 ## Managed collections
 
 - `trips`: published destinations shown on the travel site. The Trips section can import the current featured destinations.
+- Travelers can create trips in `/dashboard`; these stay unpublished until an administrator approves them from Admin → Trips. The admin overview shows a live pending-approval count, and the Trips list updates live while open. Join requests are stored under `trips/{tripId}/requests` and can only be reviewed by the trip owner or an administrator.
 - `siteContent`: published field notes shown on the travel site.
 - `bookings`: booking records and their status.
 - `travelers`: profiles created after Google sign-in; admin-only fields are writable only by trusted server code.

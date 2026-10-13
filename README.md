@@ -14,7 +14,11 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
+Open the local URL printed by Vite (usually `http://localhost:5173/`). Do not use VS Code Live Server (port `5500`) to open this app: it does not transform the React/Vite modules, so the page can appear blank.
+
 Fill the Firebase Web app values into `.env.local` before using Google sign-in. The file is ignored by Git.
+
+If Firebase is not configured yet, the app falls back to a browser-local database that persists trips, bookings, traveler requests, and content in `localStorage` so the site still works for local development and demos.
 
 ## Firebase setup
 

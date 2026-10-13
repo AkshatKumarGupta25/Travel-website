@@ -20,129 +20,16 @@ import './App.css'
 import { db, firebaseConfigured } from './firebase.js'
 import { starterDestinations } from './data/destinations.js'
 import { starterJournalEntries } from './data/journal.js'
+import { getPublishedContent, getPublishedTrips } from './data/localDatabase.js'
+import PlaceAutocomplete from './components/PlaceAutocomplete.jsx'
+import { useAuth } from './auth/useAuth.js'
 
 const photo = (id, width = 1000) =>
-  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=85`
+  id.startsWith('http') ? id : `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=85`
 
-function PlaceAutocomplete({ id, label, value, placeholder, onChange, onSelect }) {
-  const [suggestions, setSuggestions] = useState([])
-  const [isOpen, setIsOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(-1)
-  const [selectedValue, setSelectedValue] = useState('')
-
-  useEffect(() => {
-    const query = value.trim()
-    if (query.length < 2 || query === selectedValue) return undefined
-
-    const controller = new AbortController()
-    const timeout = window.setTimeout(async () => {
-      setIsLoading(true)
-      try {
-        const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lang=en`, { signal: controller.signal })
-        if (!response.ok) throw new Error('Place search failed')
-        const result = await response.json()
-        const places = result.features.filter(({ properties }) => properties.osm_key === 'place').map(({ properties }) => {
-          const name = properties.name
-          const context = [properties.city, properties.state, properties.country]
-            .filter((part, index, parts) => part && part !== name && parts.indexOf(part) === index)
-            .join(', ')
-          return { name, context, label: [name, context].filter(Boolean).join(', ') }
-        }).filter((place) => place.name)
-        setSuggestions(places.filter((place, index) => places.findIndex((item) => item.label === place.label) === index))
-        setActiveIndex(-1)
-        setIsOpen(true)
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          setSuggestions([])
-          setIsOpen(true)
-        }
-      } finally {
-        if (!controller.signal.aborted) setIsLoading(false)
-      }
-    }, 250)
-
-    return () => {
-      window.clearTimeout(timeout)
-      controller.abort()
-    }
-  }, [value, selectedValue])
-
-  function choosePlace(place) {
-    setSelectedValue(place.label)
-    onChange(place.label)
-    onSelect?.(place.name)
-    setSuggestions([])
-    setIsOpen(false)
-    setActiveIndex(-1)
-  }
-
-  function handleKeyDown(event) {
-    if (event.key === 'ArrowDown' && suggestions.length) {
-      event.preventDefault()
-      setIsOpen(true)
-      setActiveIndex((current) => (current + 1) % suggestions.length)
-    } else if (event.key === 'ArrowUp' && suggestions.length) {
-      event.preventDefault()
-      setActiveIndex((current) => (current - 1 + suggestions.length) % suggestions.length)
-    } else if (event.key === 'Enter' && isOpen && activeIndex >= 0) {
-      event.preventDefault()
-      choosePlace(suggestions[activeIndex])
-    } else if (event.key === 'Escape') {
-      setIsOpen(false)
-    }
-  }
-
-  return (
-    <div className="place-autocomplete">
-      <span className="field-label" id={`${id}-label`}>{label}</span>
-      <input
-        id={id}
-        aria-label={label}
-        aria-labelledby={`${id}-label`}
-        aria-autocomplete="list"
-        aria-controls={`${id}-suggestions`}
-        aria-expanded={isOpen && (suggestions.length > 0 || isLoading)}
-        aria-activedescendant={activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}
-        autoComplete="off"
-        placeholder={placeholder}
-        role="combobox"
-        value={value}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setSelectedValue('')
-          onChange(nextValue)
-          setIsOpen(nextValue.trim().length >= 2)
-          if (nextValue.trim().length < 2) {
-            setSuggestions([])
-            setIsLoading(false)
-            setActiveIndex(-1)
-          }
-        }}
-        onFocus={() => suggestions.length && setIsOpen(true)}
-        onKeyDown={handleKeyDown}
-      />
-      {isOpen && (suggestions.length > 0 || isLoading) && <ul className="place-suggestions" id={`${id}-suggestions`} role="listbox">
-        {isLoading && suggestions.length === 0 ? <li className="suggestion-status" role="option" aria-selected="false">Searching places…</li> : suggestions.map((place, index) => <li key={`${place.label}-${index}`} role="presentation">
-          <button
-            className={index === activeIndex ? 'place-option is-active' : 'place-option'}
-            id={`${id}-option-${index}`}
-            type="button"
-            role="option"
-            aria-selected={index === activeIndex}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => choosePlace(place)}
-          >
-            <MapPin size={15} />
-            <span><strong>{place.name}</strong>{place.context && <small>{place.context}</small>}</span>
-          </button>
-        </li>)}
-      </ul>}
-    </div>
-  )
-}
 
 function App() {
+  const { user } = useAuth()
   const [tripList, setTripList] = useState(starterDestinations)
   const [journalEntries, setJournalEntries] = useState(starterJournalEntries)
   const [origin, setOrigin] = useState('')
@@ -169,7 +56,11 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!firebaseConfigured) return undefined
+    if (!firebaseConfigured) {
+      setTripList(getPublishedTrips())
+      return undefined
+    }
+
     let current = true
     getDocs(query(collection(db, 'trips'), where('published', '==', true)))
       .then((snapshot) => {
@@ -180,7 +71,11 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!firebaseConfigured) return undefined
+    if (!firebaseConfigured) {
+      setJournalEntries(getPublishedContent())
+      return undefined
+    }
+
     let current = true
     getDocs(query(collection(db, 'siteContent'), where('published', '==', true)))
       .then((snapshot) => {
@@ -229,9 +124,9 @@ function App() {
               <a href="#destinations" onClick={() => setMenuOpen(false)}>Places</a>
               <a href="#philosophy" onClick={() => setMenuOpen(false)}>Our way</a>
               <a href="#journal" onClick={() => setMenuOpen(false)}>Field notes</a>
-              <Link to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
+              <Link to={user ? '/dashboard' : '/login'} onClick={() => setMenuOpen(false)}>{user ? 'Your dashboard' : 'Sign in'}</Link>
             </nav>
-            <a className="header-cta" href="#destinations">Plan your trip <ArrowUpRight size={15} /></a>
+            <Link className="header-cta" to={user ? '/dashboard' : '/login'}>Plan your trip <ArrowUpRight size={15} /></Link>
             <button className="menu-toggle" type="button" aria-label={menuOpen ? 'Close menu' : 'Open menu'} onClick={() => setMenuOpen(!menuOpen)}>
               {menuOpen ? <X size={21} /> : <Menu size={21} />}
             </button>
@@ -252,7 +147,7 @@ function App() {
             </div>
             <div className="finder-field destination-field">
               <span className="finder-icon"><MapPin size={17} /></span>
-              <PlaceAutocomplete id="destination" label="Going to" placeholder="Choose a destination" value={destination} onChange={(value) => { setDestination(value); setDestinationSearch(value); setSubmittedSearch('') }} onSelect={setDestinationSearch} />
+              <PlaceAutocomplete id="destination" label="Going to" placeholder="Choose a destination" value={destination} onChange={(value) => { setDestination(value); setDestinationSearch(value); setSubmittedSearch('') }} onSelect={(place) => setDestinationSearch(place.name)} />
             </div>
             <label className="finder-field date-field">
               <span className="finder-icon"><CalendarDays size={17} /></span>
@@ -290,6 +185,7 @@ function App() {
                 <span className="card-location"><span>{destination.region}</span><strong>{destination.name}</strong></span>
               </button>
               <div className="card-meta"><span>{destination.days} <i /> from {destination.price}</span><button type="button" onClick={() => setActiveTrip(destination)}>Explore journey <ArrowRight size={14} /></button></div>
+              {destination.imageCredit && <a className="image-credit" href={destination.imageCreditUrl} target="_blank" rel="noreferrer">Photo: {destination.imageCredit}</a>}
             </article>)}
           </div> : <div className="empty-results"><MapPin size={20} /><p>We haven’t mapped that one yet.</p></div>}
           <a href="#journal" className="text-link all-journeys">See how we travel <ArrowRight size={16} /></a>
@@ -340,7 +236,7 @@ function App() {
         <section className="trip-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <button className="modal-close" type="button" aria-label="Close trip details" onClick={() => setActiveTrip(null)}><X size={19} /></button>
           <img src={photo(activeTrip.image, 1100)} alt={`${activeTrip.name} landscape`} />
-          <div className="modal-copy"><p className="eyebrow"><span /> {activeTrip.region} · {activeTrip.days}</p><h2 id="modal-title">{activeTrip.name}</h2><p>{activeTrip.description}</p><div className="modal-bottom"><span>Trips from <strong>{activeTrip.price}</strong></span><a href={`mailto:hello@elsewhere.travel?subject=${encodeURIComponent(`Tell me about ${activeTrip.name}`)}`}>Ask us about this trip <ArrowUpRight size={15} /></a></div></div>
+          <div className="modal-copy"><p className="eyebrow"><span /> {activeTrip.region} · {activeTrip.days}</p><h2 id="modal-title">{activeTrip.name}</h2><p>{activeTrip.description}</p>{activeTrip.imageCredit && <a className="modal-photo-credit" href={activeTrip.imageCreditUrl} target="_blank" rel="noreferrer">Photo: {activeTrip.imageCredit}</a>}<div className="modal-bottom"><span>Trips from <strong>{activeTrip.price}</strong></span>{activeTrip.ownerUid ? <Link to="/dashboard">Ask to join this trip <ArrowUpRight size={15} /></Link> : <a href={`mailto:hello@elsewhere.travel?subject=${encodeURIComponent(`Tell me about ${activeTrip.name}`)}`}>Ask us about this trip <ArrowUpRight size={15} /></a>}</div></div>
         </section>
       </div>}
     </>

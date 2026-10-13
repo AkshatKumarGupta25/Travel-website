@@ -25,6 +25,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   updateDoc,
   writeBatch,
@@ -32,9 +33,16 @@ import {
 import { httpsCallable } from 'firebase/functions'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth.js'
-import { db, functions } from '../firebase.js'
+import { db, firebaseConfigured, functions } from '../firebase.js'
 import { starterDestinations } from '../data/destinations.js'
 import { starterJournalEntries } from '../data/journal.js'
+import {
+  createLocalRecord,
+  deleteLocalRecord,
+  getLocalDatabase,
+  saveLocalDatabase,
+  updateLocalRecord,
+} from '../data/localDatabase.js'
 import './AdminDashboard.css'
 
 const sections = [
@@ -119,6 +127,7 @@ export default function AdminDashboard() {
   const [records, setRecords] = useState([])
   const [metrics, setMetrics] = useState({})
   const [recentBookings, setRecentBookings] = useState([])
+  const [pendingTrips, setPendingTrips] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -127,15 +136,86 @@ export default function AdminDashboard() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (!firebaseConfigured) return undefined
+
     let current = true
+    const unsubscribe = onSnapshot(collection(db, 'trips'), (snapshot) => {
+      if (!current) return
+      setPendingTrips(snapshot.docs.filter((item) => item.data().approvalStatus === 'pending').length)
+    }, (loadError) => {
+      if (current) setError(loadError.message || 'Could not check pending trip approvals.')
+    })
+    return () => {
+      current = false
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    let current = true
+
+    if (firebaseConfigured && activeSection === 'trips') {
+      const unsubscribe = onSnapshot(collection(db, 'trips'), (snapshot) => {
+        if (!current) return
+        const items = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
+        items.sort((left, right) => {
+          const leftDate = left.createdAt?.toMillis?.() || new Date(left.createdAt || 0).getTime()
+          const rightDate = right.createdAt?.toMillis?.() || new Date(right.createdAt || 0).getTime()
+          return rightDate - leftDate
+        })
+        setRecords(items)
+        setLoading(false)
+      }, (loadError) => {
+        if (!current) return
+        setError(loadError.message || 'Could not load trips for approval.')
+        setLoading(false)
+      })
+      return () => {
+        current = false
+        unsubscribe()
+      }
+    }
 
     async function loadSection() {
       try {
+        if (!firebaseConfigured) {
+          const database = getLocalDatabase()
+          if (activeSection === 'overview') {
+            const names = Object.values(collections)
+            const metricsValues = Object.fromEntries(names.map((name) => [
+              name,
+              name === 'trips'
+                ? database.trips.filter((item) => item.published === true).length
+                : database[name]?.length || 0,
+            ]))
+            metricsValues.pendingTrips = database.trips.filter((trip) => trip.approvalStatus === 'pending').length
+            if (!current) return
+            setPendingTrips(metricsValues.pendingTrips)
+            setMetrics(metricsValues)
+            setRecentBookings((database.bookings || []).slice(0, 5))
+          } else {
+            const items = [...(database[activeSection === 'content' ? 'siteContent' : activeSection] || [])]
+            items.sort((left, right) => {
+              const leftDate = new Date(left.createdAt || left.updatedAt || 0).getTime()
+              const rightDate = new Date(right.createdAt || right.updatedAt || 0).getTime()
+              return rightDate - leftDate
+            })
+            if (!current) return
+            setRecords(items)
+          }
+          return
+        }
+
         if (activeSection === 'overview') {
           const names = Object.values(collections)
           const snapshots = await Promise.all(names.map((name) => getDocs(collection(db, name))))
           if (!current) return
-          setMetrics(Object.fromEntries(names.map((name, index) => [name, snapshots[index].size])))
+          setMetrics(Object.fromEntries(names.map((name, index) => [
+            name,
+            name === 'trips'
+              ? snapshots[index].docs.filter((item) => item.data().published === true).length
+              : snapshots[index].size,
+          ]).concat([['pendingTrips', snapshots[names.indexOf('trips')].docs.filter((item) => item.data().approvalStatus === 'pending').length]])))
           setRecentBookings(snapshots[names.indexOf('bookings')].docs.map((item) => ({ id: item.id, ...item.data() })).slice(0, 5))
         } else {
           const snapshot = await getDocs(collection(db, collections[activeSection]))
@@ -164,8 +244,20 @@ export default function AdminDashboard() {
     setError('')
     try {
       const collectionName = collections[activeSection]
-      const payload = { ...values, updatedAt: serverTimestamp() }
-      if (dialog.record?.id) {
+      const payload = {
+        ...values,
+        updatedAt: firebaseConfigured ? serverTimestamp() : new Date().toISOString(),
+      }
+      if (!firebaseConfigured) {
+        if (dialog.record?.id) {
+          updateLocalRecord(collectionName === 'siteContent' ? 'siteContent' : collectionName, dialog.record.id, payload)
+        } else {
+          createLocalRecord(collectionName === 'siteContent' ? 'siteContent' : collectionName, {
+            ...payload,
+            createdAt: new Date().toISOString(),
+          })
+        }
+      } else if (dialog.record?.id) {
         await updateDoc(doc(db, collectionName, dialog.record.id), payload)
       } else {
         await addDoc(collection(db, collectionName), { ...payload, createdAt: serverTimestamp() })
@@ -182,7 +274,14 @@ export default function AdminDashboard() {
 
   async function updateRecord(section, record, changes) {
     try {
-      await updateDoc(doc(db, collections[section], record.id), { ...changes, updatedAt: serverTimestamp() })
+      if (!firebaseConfigured) {
+        updateLocalRecord(section === 'content' ? 'siteContent' : collections[section], record.id, {
+          ...changes,
+          updatedAt: new Date().toISOString(),
+        })
+      } else {
+        await updateDoc(doc(db, collections[section], record.id), { ...changes, updatedAt: serverTimestamp() })
+      }
       setNotice('Record updated.')
       setRefreshKey((value) => value + 1)
     } catch (updateError) {
@@ -191,6 +290,11 @@ export default function AdminDashboard() {
   }
 
   async function callAdminFunction(name, payload) {
+    if (!firebaseConfigured) {
+      setNotice('Local mode is active; admin cloud functions are unavailable until Firebase is configured.')
+      return
+    }
+
     try {
       const result = await httpsCallable(functions, name)(payload)
       setNotice(result.data?.message || 'Traveler account updated.')
@@ -203,7 +307,9 @@ export default function AdminDashboard() {
   async function deleteRecord(section, record) {
     if (!window.confirm(`Delete this ${section === 'content' ? 'content item' : section.slice(0, -1)}? This cannot be undone.`)) return
     try {
-      if (section === 'travelers') {
+      if (!firebaseConfigured) {
+        deleteLocalRecord(section === 'content' ? 'siteContent' : collections[section], record.id)
+      } else if (section === 'travelers') {
         await httpsCallable(functions, 'deleteTraveler')({ uid: record.id })
       } else {
         await deleteDoc(doc(db, collections[section], record.id))
@@ -218,11 +324,22 @@ export default function AdminDashboard() {
   async function importFeaturedTrips() {
     setSaving(true)
     try {
-      const batch = writeBatch(db)
-      starterDestinations.forEach(({ id, ...destination }) => {
-        batch.set(doc(db, 'trips', id), { ...destination, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true })
-      })
-      await batch.commit()
+      if (!firebaseConfigured) {
+        const database = getLocalDatabase()
+        const merged = [...database.trips]
+        starterDestinations.forEach((destination) => {
+          const existingIndex = merged.findIndex((item) => item.id === destination.id)
+          if (existingIndex >= 0) merged[existingIndex] = { ...merged[existingIndex], ...destination }
+          else merged.push({ ...destination })
+        })
+        saveLocalDatabase({ ...database, trips: merged })
+      } else {
+        const batch = writeBatch(db)
+        starterDestinations.forEach(({ id, ...destination }) => {
+          batch.set(doc(db, 'trips', id), { ...destination, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true })
+        })
+        await batch.commit()
+      }
       setNotice('Featured journeys added to your trip catalogue.')
       setRefreshKey((value) => value + 1)
     } catch (importError) {
@@ -235,11 +352,22 @@ export default function AdminDashboard() {
   async function importStarterContent() {
     setSaving(true)
     try {
-      const batch = writeBatch(db)
-      starterJournalEntries.forEach(({ id, ...entry }) => {
-        batch.set(doc(db, 'siteContent', id), { ...entry, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true })
-      })
-      await batch.commit()
+      if (!firebaseConfigured) {
+        const database = getLocalDatabase()
+        const merged = [...database.siteContent]
+        starterJournalEntries.forEach((entry) => {
+          const existingIndex = merged.findIndex((item) => item.id === entry.id)
+          if (existingIndex >= 0) merged[existingIndex] = { ...merged[existingIndex], ...entry }
+          else merged.push({ ...entry })
+        })
+        saveLocalDatabase({ ...database, siteContent: merged })
+      } else {
+        const batch = writeBatch(db)
+        starterJournalEntries.forEach(({ id, ...entry }) => {
+          batch.set(doc(db, 'siteContent', id), { ...entry, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true })
+        })
+        await batch.commit()
+      }
       setNotice('Field notes added to site content.')
       setRefreshKey((value) => value + 1)
     } catch (importError) {
@@ -260,6 +388,7 @@ export default function AdminDashboard() {
   const currentSectionTitle = sectionTitles[activeSection]
   const metricCards = [
     { key: 'trips', label: 'Published trips', icon: MapPinned },
+    { key: 'pendingTrips', label: 'Trips awaiting approval', icon: MapPinned },
     { key: 'bookings', label: 'Bookings', icon: CalendarDays },
     { key: 'travelers', label: 'Travelers', icon: Users },
     { key: 'messages', label: 'Messages', icon: Mail },
@@ -285,7 +414,7 @@ export default function AdminDashboard() {
           {error && <div className="admin-error" role="alert">{error}<button type="button" aria-label="Dismiss error" onClick={() => setError('')}><X size={15} /></button></div>}
 
           {activeSection === 'overview' ? <>
-            <div className="admin-metrics">{metricCards.map(({ key, label, icon: Icon }) => <article className="admin-metric" key={key}><span className="metric-icon"><Icon size={17} /></span><span className="metric-label">{label}</span><strong>{loading ? '—' : metrics[collections[key]] ?? 0}</strong><small>Across your workspace</small></article>)}</div>
+            <div className="admin-metrics">{metricCards.map(({ key, label, icon: Icon }) => <article className="admin-metric" key={key}><span className="metric-icon"><Icon size={17} /></span><span className="metric-label">{label}</span><strong>{loading ? '—' : key === 'pendingTrips' ? pendingTrips : metrics[collections[key]] ?? 0}</strong><small>Across your workspace</small></article>)}</div>
             <div className="admin-overview-grid">
               <section className="admin-panel"><div className="admin-panel-heading"><div><span className="admin-kicker">Latest activity</span><h2>Recent bookings</h2></div><button type="button" onClick={() => changeSection('bookings')}>All bookings <ArrowUpRight size={14} /></button></div>{loading ? <p className="admin-empty">Loading bookings…</p> : recentBookings.length ? <div className="recent-bookings">{recentBookings.map((booking) => <div className="recent-booking" key={booking.id}><span className="recent-booking-icon"><CalendarDays size={16} /></span><span><strong>{booking.travelerName || booking.name || booking.email || 'New traveler'}</strong><small>{booking.destination || 'Trip inquiry'} · {readableDate(booking.createdAt)}</small></span><span className={`booking-status status-${booking.status || 'new'}`}>{booking.status || 'new'}</span></div>)}</div> : <p className="admin-empty">No bookings yet. New requests will appear here.</p>}</section>
               <section className="admin-panel admin-quick-panel"><span className="admin-kicker">Quick actions</span><h2>Keep things moving.</h2><button type="button" onClick={() => { changeSection('trips'); setDialog({ section: 'trips', record: null }) }}><MapPinned size={16} /> Add a destination <ArrowUpRight size={14} /></button><button type="button" onClick={() => { changeSection('bookings'); setDialog({ section: 'bookings', record: null }) }}><CalendarDays size={16} /> Create a booking <ArrowUpRight size={14} /></button><button type="button" onClick={() => changeSection('messages')}><Mail size={16} /> Review messages <ArrowUpRight size={14} /></button></section>
@@ -293,7 +422,7 @@ export default function AdminDashboard() {
             <div className="admin-security-note"><ShieldCheck size={16} /><span>Admin tools are protected by Firebase role claims and Firestore rules.</span></div>
           </> : <section className="admin-panel admin-records-panel">
             <div className="admin-panel-heading"><div><span className="admin-kicker">{records.length} {records.length === 1 ? 'record' : 'records'}</span><h2>{currentSectionTitle}</h2></div>{records.length === 0 && ['trips', 'content'].includes(activeSection) && <button type="button" className="admin-secondary" disabled={saving} onClick={activeSection === 'trips' ? importFeaturedTrips : importStarterContent}><BookOpen size={15} /> {saving ? 'Importing…' : `Import featured ${activeSection === 'trips' ? 'trips' : 'field notes'}`}</button>}</div>
-            {loading ? <p className="admin-empty">Loading {currentSectionTitle.toLowerCase()}…</p> : records.length === 0 ? <div className="admin-empty-state"><span className="admin-empty-icon"><Activity size={20} /></span><h3>Nothing here yet.</h3><p>{activeSection === 'trips' ? 'Import the featured journeys or create a destination to start your catalogue.' : activeSection === 'content' ? 'Import the current field notes or create a new story.' : `New ${activeSection} records will appear here.`}</p>{['trips', 'content'].includes(activeSection) && <button type="button" className="admin-primary" disabled={saving} onClick={activeSection === 'trips' ? importFeaturedTrips : importStarterContent}><BookOpen size={15} /> Import featured {activeSection === 'trips' ? 'trips' : 'field notes'}</button>}</div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr>{getHeaders(activeSection).map((heading) => <th key={heading}>{heading}</th>)}<th>Actions</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}>{renderCells(activeSection, record, (status) => updateRecord('bookings', record, { status }), (published) => updateRecord(activeSection, record, { published }), (isRead) => updateRecord('messages', record, { isRead }))}<td className="admin-row-actions">
+            {loading ? <p className="admin-empty">Loading {currentSectionTitle.toLowerCase()}…</p> : records.length === 0 ? <div className="admin-empty-state"><span className="admin-empty-icon"><Activity size={20} /></span><h3>Nothing here yet.</h3><p>{activeSection === 'trips' ? 'Import the featured journeys or create a destination to start your catalogue.' : activeSection === 'content' ? 'Import the current field notes or create a new story.' : `New ${activeSection} records will appear here.`}</p>{['trips', 'content'].includes(activeSection) && <button type="button" className="admin-primary" disabled={saving} onClick={activeSection === 'trips' ? importFeaturedTrips : importStarterContent}><BookOpen size={15} /> Import featured {activeSection === 'trips' ? 'trips' : 'field notes'}</button>}</div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr>{getHeaders(activeSection).map((heading) => <th key={heading}>{heading}</th>)}<th>Actions</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}>{renderCells(activeSection, record, (status) => updateRecord('bookings', record, { status }), (published) => updateRecord(activeSection, record, activeSection === 'trips' ? { published, approvalStatus: published ? 'approved' : 'rejected' } : { published }), (isRead) => updateRecord('messages', record, { isRead }))}<td className="admin-row-actions">
               {['trips', 'content'].includes(activeSection) && <button className="admin-small-action" type="button" onClick={() => setDialog({ section: activeSection, record })}>Edit</button>}
               {activeSection === 'travelers' && record.id !== user?.uid && <><button className="admin-small-action" type="button" onClick={() => callAdminFunction('setAdminRole', { uid: record.id, admin: !record.admin })}>{record.admin ? 'Remove admin' : 'Make admin'}</button><button className="admin-small-action" type="button" onClick={() => callAdminFunction('setTravelerDisabled', { uid: record.id, disabled: !record.disabled })}>{record.disabled ? 'Enable' : 'Disable'}</button></>}
               {activeSection === 'messages' && <button className="admin-small-action" type="button" onClick={() => updateRecord('messages', record, { isRead: !record.isRead })}>{record.isRead ? 'Mark unread' : 'Mark read'}</button>}
@@ -310,7 +439,7 @@ export default function AdminDashboard() {
 
 function getHeaders(section) {
   return {
-    trips: ['Destination', 'Region', 'Duration', 'Price', 'Website'],
+    trips: ['Destination', 'Region', 'Duration', 'Price', 'Approval'],
     bookings: ['Traveler', 'Destination', 'Travel date', 'Travelers', 'Status'],
     travelers: ['UID', 'Traveler', 'Email', 'Joined', 'Account', 'Role'],
     messages: ['From', 'Subject', 'Message', 'Received', 'Status'],
@@ -320,7 +449,7 @@ function getHeaders(section) {
 
 function renderCells(section, record, updateStatus, updatePublished, updateRead) {
   if (section === 'trips') return <>
-    <td><strong>{record.name || 'Untitled trip'}</strong><small>{record.id}</small></td><td>{record.region || '—'}</td><td>{record.days || '—'}</td><td>{record.price || '—'}</td><td><button className={`booking-status ${record.published ? 'status-confirmed' : 'status-cancelled'}`} type="button" onClick={() => updatePublished(!record.published)}>{record.published ? 'Published' : 'Draft'}</button></td>
+    <td><strong>{record.name || 'Untitled trip'}</strong><small>{record.ownerName ? `By ${record.ownerName}` : record.id}</small></td><td>{record.region || '—'}</td><td>{record.days || '—'}</td><td>{record.price || '—'}</td><td><button className={`booking-status ${record.published ? 'status-confirmed' : record.approvalStatus === 'rejected' ? 'status-cancelled' : 'status-new'}`} type="button" onClick={() => updatePublished(!record.published)}>{record.published ? 'Published' : record.approvalStatus === 'pending' ? 'Approve trip' : record.approvalStatus === 'rejected' ? 'Declined' : 'Draft'}</button></td>
   </>
   if (section === 'bookings') return <>
     <td><strong>{record.travelerName || record.name || 'Traveler'}</strong><small>{record.email || '—'}</small></td><td>{record.destination || '—'}</td><td>{record.startDate || readableDate(record.createdAt)}</td><td>{record.travelers || 1}</td><td><select className="admin-status-select" aria-label={`Booking status for ${record.travelerName || record.email || 'traveler'}`} value={record.status || 'new'} onChange={(event) => updateStatus(event.target.value)}><option value="new">New</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></td>

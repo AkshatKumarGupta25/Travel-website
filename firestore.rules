@@ -7,7 +7,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && request.auth.token.admin == true;
+      return signedIn() && (request.auth.token.admin == true || request.auth.token.role == 'admin');
     }
 
     match /travelers/{uid} {
@@ -23,8 +23,67 @@ service cloud.firestore {
     }
 
     match /trips/{tripId} {
-      allow read: if isAdmin() || resource.data.published == true;
-      allow write: if isAdmin();
+      allow read: if isAdmin()
+        || resource.data.published == true
+        || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create: if isAdmin() || (signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.published == false
+        && request.resource.data.approvalStatus == 'pending'
+        && request.resource.data.name is string
+        && request.resource.data.destination is string
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 20
+        && request.resource.data.description.size() <= 800
+        && request.resource.data.maxTravelers is int
+        && request.resource.data.maxTravelers >= 2
+        && request.resource.data.maxTravelers <= 30
+        && request.resource.data.keys().hasOnly([
+          'name', 'region', 'destination', 'days', 'price', 'image', 'description',
+          'imageSource', 'imageCredit', 'imageCreditUrl', 'tag', 'published',
+          'approvalStatus', 'ownerUid', 'ownerName',
+          'startDate', 'maxTravelers', 'createdAt', 'updatedAt'
+        ]));
+      allow update: if isAdmin() || (signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && resource.data.published == false
+        && request.resource.data.published == false
+        && request.resource.data.approvalStatus == resource.data.approvalStatus
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'region', 'destination', 'days', 'price', 'image', 'description',
+          'imageSource', 'imageCredit', 'imageCreditUrl',
+          'tag', 'startDate', 'maxTravelers', 'updatedAt'
+        ]));
+      allow delete: if isAdmin() || (signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && resource.data.published == false);
+
+      match /requests/{requestId} {
+        function trip() {
+          return get(/databases/$(database)/documents/trips/$(tripId)).data;
+        }
+
+        allow read: if isAdmin() || (signedIn()
+          && (resource.data.travelerUid == request.auth.uid
+            || trip().ownerUid == request.auth.uid));
+        allow create: if signedIn()
+          && trip().published == true
+          && trip().ownerUid != request.auth.uid
+          && request.resource.data.tripId == tripId
+          && request.resource.data.ownerUid == trip().ownerUid
+          && request.resource.data.travelerUid == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.keys().hasOnly([
+            'tripId', 'tripName', 'ownerUid', 'travelerUid',
+            'travelerName', 'travelerEmail', 'status', 'createdAt'
+          ]);
+        allow update: if isAdmin() || (signedIn()
+          && trip().ownerUid == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['accepted', 'rejected']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
+        allow delete: if isAdmin();
+      }
     }
 
     match /bookings/{bookingId} {

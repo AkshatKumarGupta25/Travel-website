@@ -1,0 +1,11 @@
+.place-autocomplete { position: relative; flex: 1; min-width: 0; }
+.place-autocomplete > input { width: 100%; min-width: 0; padding: 0; border: 0; color: var(--ink); background: transparent; font: 600 12px/1.3 var(--sans); }
+.place-autocomplete > input::placeholder { color: var(--ink); opacity: 1; }
+.place-suggestions { position: absolute; z-index: 20; top: calc(100% + 15px); left: -12px; width: min(340px, calc(100vw - 40px)); max-height: 290px; margin: 0; padding: 6px; overflow-y: auto; list-style: none; background: var(--paper); box-shadow: 0 14px 34px rgba(17,39,30,.2); }
+.place-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 47px; padding: 8px 10px; border: 0; color: var(--ink); background: transparent; text-align: left; cursor: pointer; }
+.place-option > svg { flex: 0 0 auto; color: var(--forest); }
+.place-option > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.place-option strong { font-size: 11px; font-weight: 600; }
+.place-option small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.place-option:hover, .place-option.is-active { background: #e7ebdf; }
+.suggestion-status { padding: 14px 10px; color: var(--muted); font-size: 10px; list-style: none; }

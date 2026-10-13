@@ -6,6 +6,7 @@ import { useAuth } from './auth/useAuth.js'
 const App = lazy(() => import('./App.jsx'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard.jsx'))
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'))
+const UserDashboard = lazy(() => import('./pages/UserDashboard.jsx'))
 
 function AdminRoute() {
   const { user, isAdmin, loading } = useAuth()
@@ -15,11 +16,19 @@ function AdminRoute() {
   return <AdminDashboard />
 }
 
+function UserRoute() {
+  const { user, loading } = useAuth()
+  if (loading) return <div className="route-loading">Checking your account…</div>
+  if (!user) return <Navigate to="/login" replace />
+  return <UserDashboard />
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<App />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/dashboard" element={<UserRoute />} />
       <Route path="/admin/login" element={<LoginPage admin />} />
       <Route path="/admin/*" element={<AdminRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -108,6 +108,7 @@ main { overflow: hidden; }
 .card-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--coral); }
 .card-meta > button { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; color: var(--forest); background: transparent; font: 700 9px var(--sans); white-space: nowrap; cursor: pointer; }
 .card-meta > button:hover { color: #bd604c; }
+.image-credit { display: inline-block; margin-top: 7px; color: #7b867b; font-size: 8px; text-decoration: underline; text-underline-offset: 2px; }
 .save-button { position: absolute; }
 .destination-card { position: relative; }
 .search-feedback { display: flex; justify-content: space-between; align-items: center; margin: -18px 0 26px; color: var(--muted); font-size: 12px; }
@@ -176,6 +177,7 @@ main { overflow: hidden; }
 .modal-copy { display: flex; flex-direction: column; justify-content: center; padding: 50px 42px 42px; }
 .modal-copy h2 { margin: 17px 0 16px; color: var(--ink); font: 400 39px/1.05 var(--serif); }
 .modal-copy > p:not(.eyebrow) { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.modal-photo-credit { margin-top: 10px; color: #7b867b; font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }
 .modal-bottom { display: flex; flex-direction: column; align-items: flex-start; gap: 23px; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .modal-bottom strong { color: var(--ink); }
 .modal-bottom a { display: inline-flex; align-items: center; gap: 8px; color: var(--forest); font-size: 11px; font-weight: 700; text-decoration: none; }
