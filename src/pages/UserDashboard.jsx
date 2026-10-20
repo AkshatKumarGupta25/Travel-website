@@ -228,10 +228,19 @@ export default function UserDashboard() {
 
       let savedTripId
       if (!firebaseConfigured) {
-        savedTripId = createLocalRecord('trips', tripRecord).id
+        const savedTrip = createLocalRecord('trips', tripRecord)
+        savedTripId = savedTrip.id
+        setHostedTrips((current) => [savedTrip, ...current])
       } else {
         const tripReference = await addDoc(collection(db, 'trips'), tripRecord)
         savedTripId = tripReference.id
+        const savedAt = new Date()
+        setHostedTrips((current) => [{
+          ...tripRecord,
+          id: savedTripId,
+          createdAt: savedAt,
+          updatedAt: savedAt,
+        }, ...current])
       }
 
       setNotice('Your trip was sent to the admin team for approval.')
@@ -240,7 +249,6 @@ export default function UserDashboard() {
       setSelectedPlace(null)
       setDescription('')
       setStartDate('')
-      refreshDashboard()
 
       void (async () => {
         try {
@@ -257,6 +265,9 @@ export default function UserDashboard() {
           } else {
             await updateDoc(doc(db, 'trips', savedTripId), photoFields)
           }
+          setHostedTrips((current) => current.map((trip) => (
+            trip.id === savedTripId ? { ...trip, ...photoFields } : trip
+          )))
           setPhotoNotice(destinationPhoto.warning
             ? `Using ${destinationPhoto.source}. Configure the Google Places API key to use Google destination photos.`
             : `Destination thumbnail found with ${destinationPhoto.source}.`)
