@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  addDoc,
   collection,
   collectionGroup,
   doc,
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore'
@@ -25,6 +25,21 @@ import './UserDashboard.css'
 const fallbackImage = 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=85'
 const minimumStartDate = new Date().toISOString().slice(0, 10)
 const destinationPhotoTimeoutMs = 6000
+const tripSaveTimeoutMs = 15000
+
+function saveTripWithTimeout(reference, tripRecord) {
+  let timeoutId
+  const save = setDoc(reference, tripRecord)
+  const timeout = new Promise((resolve, reject) => {
+    timeoutId = window.setTimeout(() => {
+      const error = new Error('Firestore did not confirm the trip save within 15 seconds.')
+      error.code = 'trip/save-timeout'
+      reject(error)
+    }, tripSaveTimeoutMs)
+  })
+
+  return Promise.race([save, timeout]).finally(() => window.clearTimeout(timeoutId))
+}
 
 async function getDestinationImage(place) {
   const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
@@ -130,6 +145,7 @@ export default function UserDashboard() {
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
+  const pendingTripWrite = useRef(null)
 
   useEffect(() => {
     if (!user) return undefined
@@ -222,7 +238,9 @@ export default function UserDashboard() {
         ownerName: user.displayName || user.email || 'Traveler',
         startDate,
         maxTravelers: Number(maxTravelers),
-        createdAt: firebaseConfigured ? serverTimestamp() : new Date().toISOString(),
+        createdAt: firebaseConfigured
+          ? pendingTripWrite.current?.createdAt || new Date().toISOString()
+          : new Date().toISOString(),
         updatedAt: firebaseConfigured ? serverTimestamp() : new Date().toISOString(),
       }
 
@@ -232,8 +250,16 @@ export default function UserDashboard() {
         savedTripId = savedTrip.id
         setHostedTrips((current) => [savedTrip, ...current])
       } else {
-        const tripReference = await addDoc(collection(db, 'trips'), tripRecord)
+        if (!pendingTripWrite.current) {
+          pendingTripWrite.current = {
+            reference: doc(collection(db, 'trips')),
+            createdAt: tripRecord.createdAt,
+          }
+        }
+        const tripReference = pendingTripWrite.current.reference
+        await saveTripWithTimeout(tripReference, tripRecord)
         savedTripId = tripReference.id
+        pendingTripWrite.current = null
         const savedAt = new Date()
         setHostedTrips((current) => [{
           ...tripRecord,
@@ -276,7 +302,9 @@ export default function UserDashboard() {
         }
       })()
     } catch (saveError) {
-      setError(saveError.message || 'Could not create this trip.')
+      setError(saveError.code === 'trip/save-timeout'
+        ? 'Firestore has not confirmed this trip yet. Check your connection and Firebase Firestore availability, then retry; this page will reuse the same trip ID to avoid duplicates.'
+        : [saveError.code, saveError.message].filter(Boolean).join(': ') || 'Could not create this trip.')
       setPhotoNotice('')
     } finally {
       setSaving(false)
