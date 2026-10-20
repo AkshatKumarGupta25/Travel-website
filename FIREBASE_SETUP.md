@@ -6,7 +6,7 @@ The app uses Firebase Authentication for Google sign-in, Cloud Firestore for man
 
 1. Create a Firebase project and register a Web app in the Firebase console.
 2. In Authentication, enable Google as a sign-in provider and add `localhost` plus your production domain to Authorized domains.
-3. Create a Cloud Firestore database.
+3. Use the existing Cloud Firestore database with ID `default` in `asia-south1`. The app explicitly connects to this named database; it does not use the separate `(default)` database ID.
 4. Copy `.env.example` to `.env.local` and fill in the Web app values from Project settings. Restart the Vite dev server after changing environment variables.
 5. To use Google destination thumbnails for traveler-created trips, enable the Places API (New), create a browser API key restricted to your site’s HTTP referrers and Places API, and set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local`. Without it, the dashboard searches Wikimedia Commons for a matching destination image.
 

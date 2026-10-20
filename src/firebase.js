@@ -16,7 +16,7 @@ export const firebaseConfigured = Object.values(firebaseConfig).every(Boolean)
 const app = firebaseConfigured ? (getApps().length ? getApp() : initializeApp(firebaseConfig)) : null
 
 export const auth = app ? getAuth(app) : null
-export const db = app ? getFirestore(app) : null
+export const db = app ? getFirestore(app, 'default') : null
 export const functions = app ? getFunctions(app) : null
 export const googleProvider = new GoogleAuthProvider()
 
